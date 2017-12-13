@@ -1,0 +1,10 @@
+[package]
+name = "zmq_testing"
+version = "0.1.0"
+authors = ["cannon <cannon10100@gmail.com>"]
+
+[dependencies]
+zmq = "0.8"
+rand = "0.3"
+time = "0.1"
+lazy_static = "*"
