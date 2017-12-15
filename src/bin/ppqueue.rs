@@ -26,7 +26,7 @@ struct Worker {
 impl Worker {
     fn new(identity: Message) -> Worker {
         Worker {
-            id_string: String::from(identity.as_str().unwrap()),
+            id_string: String::from(format!("{:?}", identity)),
             identity,
             expiry: time::Instant::now() +
                 time::Duration::from_millis(HEARTBEAT_INTERVAL * HEARTBEAT_LIVENESS),
@@ -38,14 +38,17 @@ fn worker_ready<'a>(ready_worker: Worker, workers: &mut Vec<Worker>) {
     let mut index = 0;
     let mut rem_found = false;
     {
-        let worker = workers.get(0);
-        while worker.is_some() {
+        let mut worker = workers.get(0);
+        loop {
+            if !worker.is_some() {
+                break;
+            }
             if worker.unwrap().id_string == ready_worker.id_string {
                 rem_found = true;
                 break;
             }
             index += 1;
-            let worker = workers.get(index);
+            worker = workers.get(index);
         }
     }
     if rem_found {
@@ -89,6 +92,7 @@ fn main() {
 
         let rc = zmq::poll(&mut items, HEARTBEAT_INTERVAL as i64).unwrap();
         if rc == -1 {
+            println!("E: Poll returned -1");
             break;
         }
 
@@ -110,7 +114,7 @@ fn main() {
                     }
                 } else {
                     let rest_slice = rest.iter().map(|x| x.as_ref() as &[u8]).collect::<Vec<&[u8]>>();
-                    frontend.send_multipart(&rest_slice[1..], 0).unwrap();
+                    frontend.send_multipart(&rest_slice, 0).unwrap();
                 }
             }
         }
@@ -118,7 +122,6 @@ fn main() {
         // Handle client activity
         if items[1].is_readable() {
             let mut msg = frontend.recv_multipart(0).unwrap();
-            println!("Got message: {:?}", msg);
             let blank: Vec<u8> = vec!();
             let worker_identity = worker_next(&mut workers);
 
@@ -132,16 +135,20 @@ fn main() {
         }
 
         if time::Instant::now() >= heartbeat_at {
-            let worker = workers.first();
+            let mut worker = workers.first();
             let mut index = 0;
 
-            while worker.is_some() {
+            loop {
+                if !worker.is_some() {
+                    break;
+                }
+
                 backend.send(&worker.unwrap().identity.to_vec(), zmq::SNDMORE);
                 backend.send("".as_bytes(), zmq::SNDMORE);
                 backend.send(PPP_HEARTBEAT.to_string().as_bytes(), 0);
 
                 index += 1;
-                let worker = workers.get(index);
+                worker = workers.get(index);
             }
 
             heartbeat_at = time::Instant::now() + time::Duration::from_millis(HEARTBEAT_INTERVAL);
@@ -149,4 +156,5 @@ fn main() {
 
         workers_purge(&mut workers);
     }
+    println!("Ending");
 }

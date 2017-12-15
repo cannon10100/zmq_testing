@@ -22,13 +22,17 @@ fn main() {
 
         let mut expect_reply = 1;
         while expect_reply != 0 {
-            let mut items = [ client.as_poll_item(zmq::POLLIN) ];
-            let rc = zmq::poll(&mut items, REQUEST_TIMEOUT).unwrap();
-            if rc == -1 {
-                break;
+            let mut is_readable = false;
+            {
+                let mut items = [client.as_poll_item(zmq::POLLIN)];
+                let rc = zmq::poll(&mut items, REQUEST_TIMEOUT).unwrap();
+                if rc == -1 {
+                    break;
+                }
+                is_readable = items[0].is_readable();
             }
 
-            if items[0].is_readable() {
+            if is_readable {
                 let reply = client.recv_string(0).unwrap().unwrap();
                 let error_string = format!("E: malformed reply from server: {}", reply);
                 let num: i32 = reply.parse()
@@ -46,7 +50,7 @@ fn main() {
                     break;
                 } else {
                     println!("W: no response from server, retrying...");
-                    let mut client = context.socket(zmq::REQ).unwrap();
+                    client = context.socket(zmq::REQ).unwrap();
                     assert!(client.connect(SERVER_ENDPOINT).is_ok());
                     client.send_str(&request, 0);
                 }
